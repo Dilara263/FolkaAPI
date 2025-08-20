@@ -3,6 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
+using FolkaAPI.Data;
+using FolkaAPI.Models;
+using Microsoft.EntityFrameworkCore;
 
 namespace FolkaAPI.Controllers
 {
@@ -11,70 +14,89 @@ namespace FolkaAPI.Controllers
     [Authorize]
     public class FavoritesController : ControllerBase
     {
-        private static Dictionary<string, List<string>> _userFavoriteProductIds = new Dictionary<string, List<string>>();
+        private readonly ApplicationDbContext _context;
 
-        private string GetUserId()
+        public FavoritesController(ApplicationDbContext context)
         {
-            return User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            _context = context;
+        }
+
+        private string? GetUserId()
+        {
+            return User.FindFirstValue(ClaimTypes.NameIdentifier);
         }
 
         [HttpGet]
-        public ActionResult<IEnumerable<string>> GetFavorites()
+        public async Task<ActionResult<IEnumerable<string>>> GetFavorites()
         {
-            string userId = GetUserId();
+            string? userId = GetUserId();
             if (string.IsNullOrEmpty(userId))
             {
                 return Unauthorized();
             }
-            if (!_userFavoriteProductIds.TryGetValue(userId, out List<string> userFavorites))
-            {
-                userFavorites = new List<string>();
-                _userFavoriteProductIds.Add(userId, userFavorites);
-            }
 
-            if (userFavorites.Count == 0)
+            var userFavoriteProductIds = await _context.UserFavorites
+                                                    .Where(uf => uf.UserId == userId)
+                                                    .Select(uf => uf.ProductId)
+                                                    .ToListAsync();
+
+            if (userFavoriteProductIds.Count == 0)
             {
                 return NoContent();
             }
 
-            return Ok(userFavorites);
+            return Ok(userFavoriteProductIds);
         }
 
         [HttpPost("{productId}")]
-        public IActionResult AddFavorite(string productId)
+        public async Task<IActionResult> AddFavorite(string productId)
         {
-            string userId = GetUserId();
+            string? userId = GetUserId();
             if (string.IsNullOrEmpty(userId))
             {
                 return Unauthorized();
             }
 
-            if (!_userFavoriteProductIds.TryGetValue(userId, out List<string> userFavorites))
+            var existingFavorite = await _context.UserFavorites
+                                                .AnyAsync(uf => uf.UserId == userId && uf.ProductId == productId);
+
+            if (existingFavorite)
             {
-                userFavorites = new List<string>();
-                _userFavoriteProductIds.Add(userId, userFavorites);
+                return BadRequest(new { message = "Ürün zaten favorilerde." });
             }
 
-            if (!userFavorites.Contains(productId))
+            var productExists = await _context.Products.AnyAsync(p => p.Id == productId);
+            if (!productExists)
             {
-                userFavorites.Add(productId);
+                return NotFound(new { message = "Favorilere eklenecek ürün bulunamadı." });
             }
+
+            _context.UserFavorites.Add(new UserFavorite { UserId = userId, ProductId = productId });
+            await _context.SaveChangesAsync();
+
             return NoContent();
         }
 
         [HttpDelete("{productId}")]
-        public IActionResult RemoveFavorite(string productId)
+        public async Task<IActionResult> RemoveFavorite(string productId)
         {
-            string userId = GetUserId();
+            string? userId = GetUserId();
             if (string.IsNullOrEmpty(userId))
             {
                 return Unauthorized();
             }
 
-            if (_userFavoriteProductIds.TryGetValue(userId, out List<string> userFavorites))
+            var favoriteToRemove = await _context.UserFavorites
+                                                .FirstOrDefaultAsync(uf => uf.UserId == userId && uf.ProductId == productId);
+
+            if (favoriteToRemove == null)
             {
-                userFavorites.Remove(productId);
+                return NoContent();
             }
+
+            _context.UserFavorites.Remove(favoriteToRemove);
+            await _context.SaveChangesAsync();
+
             return NoContent();
         }
     }

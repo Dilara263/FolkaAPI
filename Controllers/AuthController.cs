@@ -6,6 +6,9 @@ using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using FolkaAPI.Data;
+using Microsoft.EntityFrameworkCore;
+using BCrypt.Net;
 
 namespace FolkaAPI.Controllers
 {
@@ -13,23 +16,23 @@ namespace FolkaAPI.Controllers
     [ApiController]
     public class AuthController : ControllerBase
     {
-        private static List<User> _users = new List<User>
-        {
-            new User { Id = "1", Name = "Dilara", Email = "dilaraemail", Password = "123", PhoneNumber = "+90 555 123 4567", Address = "Folka Sanat Sokağı, No:12" },
-            new User { Id = "2", Name = "emo", Email = "emoemail", Password = "123", PhoneNumber = null, Address = null }
-        };
-
         private readonly IConfiguration _configuration;
+        private readonly ApplicationDbContext _context;
 
-        public AuthController(IConfiguration configuration)
+        public AuthController(IConfiguration configuration, ApplicationDbContext context)
         {
             _configuration = configuration;
+            _context = context;
+        }
+        private string? GetUserId()
+        {
+            return User.FindFirstValue(ClaimTypes.NameIdentifier);
         }
 
         [HttpPost("register")]
-        public IActionResult Register(UserRegisterDto request)
+        public async Task<IActionResult> Register(UserRegisterDto request)
         {
-            if (_users.Any(u => u.Email == request.Email))
+            if (await _context.Users.AnyAsync(u => u.Email == request.Email))
             {
                 return BadRequest(new { message = "Bu email adresi zaten kullanılıyor." });
             }
@@ -39,26 +42,38 @@ namespace FolkaAPI.Controllers
                 Id = Guid.NewGuid().ToString(),
                 Name = request.Name,
                 Email = request.Email,
-                Password = request.Password
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password)
             };
 
-            _users.Add(newUser);
+            _context.Users.Add(newUser);
+            await _context.SaveChangesAsync();
 
             return Ok(new { message = "Kullanıcı başarıyla oluşturuldu." });
         }
 
         [HttpPost("login")]
-        public IActionResult Login(UserLoginDto request)
+        public async Task<IActionResult> Login(UserLoginDto request)
         {
-            var user = _users.FirstOrDefault(u => u.Email == request.Email);
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
 
-            if (user == null || user.Password != request.Password)
+            if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
             {
                 return Unauthorized("Geçersiz email veya şifre.");
             }
 
             string token = CreateToken(user);
-            return Ok(new { token = token, user = user });
+            return Ok(new
+            {
+                token = token,
+                user = new
+                {
+                    user.Id,
+                    user.Name,
+                    user.Email,
+                    user.PhoneNumber,
+                    user.Address
+                }
+            });
         }
 
         private string CreateToken(User user)
@@ -66,8 +81,8 @@ namespace FolkaAPI.Controllers
             var claims = new List<Claim>
             {
                 new Claim(ClaimTypes.NameIdentifier, user.Id),
-                new Claim(ClaimTypes.Name, user.Name),
-                new Claim(ClaimTypes.Email, user.Email)
+                new Claim(ClaimTypes.Name, user.Name ?? ""),
+                new Claim(ClaimTypes.Email, user.Email ?? "")
             };
 
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(
@@ -90,20 +105,19 @@ namespace FolkaAPI.Controllers
 
         [Authorize]
         [HttpPut("update-profile")]
-        public IActionResult UpdateProfile([FromBody] UserUpdateDto userUpdateDto)
+        public async Task<IActionResult> UpdateProfile([FromBody] UserUpdateDto userUpdateDto)
         {
-            var userEmail = HttpContext.User.Claims.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value;
-
-            if (userEmail == null)
+            string? userId = GetUserId(); // GetUserId() çağrısı artık geçerli olacak
+            if (string.IsNullOrEmpty(userId))
             {
                 return Unauthorized();
             }
 
-            var userToUpdate = _users.FirstOrDefault(u => u.Email == userEmail);
+            var userToUpdate = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
 
             if (userToUpdate == null)
             {
-                return NotFound("Kullanıcı bulunamadı.");
+                return NotFound(new { message = "Kullanıcı bulunamadı." });
             }
 
             if (!string.IsNullOrEmpty(userUpdateDto.Name))
@@ -113,9 +127,9 @@ namespace FolkaAPI.Controllers
 
             if (!string.IsNullOrEmpty(userUpdateDto.Email))
             {
-                if (_users.Any(u => u.Email == userUpdateDto.Email && u.Id != userToUpdate.Id))
+                if (await _context.Users.AnyAsync(u => u.Email == userUpdateDto.Email && u.Id != userToUpdate.Id))
                 {
-                    return BadRequest("Bu e-posta adresi zaten kullanımda.");
+                    return BadRequest(new { message = "Bu e-posta adresi zaten kullanımda." });
                 }
                 userToUpdate.Email = userUpdateDto.Email;
             }
@@ -130,7 +144,17 @@ namespace FolkaAPI.Controllers
                 userToUpdate.Address = userUpdateDto.Address;
             }
 
-            return Ok(userToUpdate);
+            _context.Users.Update(userToUpdate);
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                userToUpdate.Id,
+                userToUpdate.Name,
+                userToUpdate.Email,
+                userToUpdate.PhoneNumber,
+                userToUpdate.Address
+            });
         }
     }
 }
