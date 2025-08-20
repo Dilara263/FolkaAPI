@@ -3,6 +3,7 @@ using System;
 using FolkaAPI.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace FolkaAPI.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250820104507_AddOrderTabless")]
+    partial class AddOrderTabless
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.8");
@@ -85,6 +88,9 @@ namespace FolkaAPI.Migrations
                     b.Property<int>("OrderId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int?>("OrderId1")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("ProductId")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -104,6 +110,8 @@ namespace FolkaAPI.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("OrderId");
+
+                    b.HasIndex("OrderId1");
 
                     b.HasIndex("ProductId");
 
@@ -268,11 +276,15 @@ namespace FolkaAPI.Migrations
 
             modelBuilder.Entity("FolkaAPI.Models.OrderItem", b =>
                 {
-                    b.HasOne("FolkaAPI.Models.Order", "Order")
+                    b.HasOne("FolkaAPI.Models.Order", null)
                         .WithMany("OrderItems")
                         .HasForeignKey("OrderId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.HasOne("FolkaAPI.Models.Order", "Order")
+                        .WithMany()
+                        .HasForeignKey("OrderId1");
 
                     b.HasOne("FolkaAPI.Models.Product", null)
                         .WithMany()

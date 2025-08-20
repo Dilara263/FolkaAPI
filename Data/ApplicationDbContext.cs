@@ -14,6 +14,8 @@ namespace FolkaAPI.Data
         public DbSet<User> Users { get; set; }
         public DbSet<CartItem> CartItems { get; set; }
         public DbSet<UserFavorite> UserFavorites { get; set; }
+        public DbSet<Order> Orders { get; set; }
+        public DbSet<OrderItem> OrderItems { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -68,6 +70,25 @@ namespace FolkaAPI.Data
                 .WithMany()
                 .HasForeignKey(uf => uf.ProductId)
                 .IsRequired();
+
+            modelBuilder.Entity<Order>()
+                .HasOne<User>()
+                .WithMany()
+                .HasForeignKey(o => o.UserId)
+                .IsRequired();
+
+            modelBuilder.Entity<OrderItem>()
+                .HasOne(oi => oi.Order)
+                .WithMany(o => o.OrderItems)
+                .HasForeignKey(oi => oi.OrderId)
+                .IsRequired();
+
+            modelBuilder.Entity<OrderItem>()
+                .HasOne<Product>()
+                .WithMany()
+                .HasForeignKey(oi => oi.ProductId)
+                .IsRequired();
+
         }
     }
 }
