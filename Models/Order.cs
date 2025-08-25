@@ -10,6 +10,7 @@ namespace FolkaAPI.Models
         public DateTime OrderDate { get; set; } = DateTime.UtcNow;
         public decimal TotalPrice { get; set; }
         public string? Status { get; set; } = "Pending";
+        public string? AppliedCouponCode { get; set; }
         public ICollection<OrderItem> OrderItems { get; set; } = new List<OrderItem>();
     }
 }

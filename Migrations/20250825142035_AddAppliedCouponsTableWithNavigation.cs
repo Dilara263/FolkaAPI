@@ -1,33 +1,36 @@
-﻿using Microsoft.EntityFrameworkCore.Migrations;
+﻿using System;
+using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace FolkaAPI.Migrations
 {
     /// <inheritdoc />
-    public partial class AddUserFavoritesTable : Migration
+    public partial class AddAppliedCouponsTableWithNavigation : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.CreateTable(
-                name: "UserFavorites",
+                name: "AppliedCoupons",
                 columns: table => new
                 {
                     UserId = table.Column<string>(type: "TEXT", nullable: false),
-                    ProductId = table.Column<string>(type: "TEXT", nullable: false)
+                    Id = table.Column<int>(type: "INTEGER", nullable: false),
+                    CouponId = table.Column<string>(type: "TEXT", nullable: false),
+                    AppliedDate = table.Column<DateTime>(type: "TEXT", nullable: false)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_UserFavorites", x => new { x.UserId, x.ProductId });
+                    table.PrimaryKey("PK_AppliedCoupons", x => x.UserId);
                     table.ForeignKey(
-                        name: "FK_UserFavorites_Products_ProductId",
-                        column: x => x.ProductId,
-                        principalTable: "Products",
+                        name: "FK_AppliedCoupons_Coupons_CouponId",
+                        column: x => x.CouponId,
+                        principalTable: "Coupons",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                     table.ForeignKey(
-                        name: "FK_UserFavorites_Users_UserId",
+                        name: "FK_AppliedCoupons_Users_UserId",
                         column: x => x.UserId,
                         principalTable: "Users",
                         principalColumn: "Id",
@@ -35,16 +38,16 @@ namespace FolkaAPI.Migrations
                 });
 
             migrationBuilder.CreateIndex(
-                name: "IX_UserFavorites_ProductId",
-                table: "UserFavorites",
-                column: "ProductId");
+                name: "IX_AppliedCoupons_CouponId",
+                table: "AppliedCoupons",
+                column: "CouponId");
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(
-                name: "UserFavorites");
+                name: "AppliedCoupons");
         }
     }
 }

@@ -107,7 +107,7 @@ namespace FolkaAPI.Controllers
         [HttpPut("update-profile")]
         public async Task<IActionResult> UpdateProfile([FromBody] UserUpdateDto userUpdateDto)
         {
-            string? userId = GetUserId(); // GetUserId() çağrısı artık geçerli olacak
+            string? userId = GetUserId();
             if (string.IsNullOrEmpty(userId))
             {
                 return Unauthorized();

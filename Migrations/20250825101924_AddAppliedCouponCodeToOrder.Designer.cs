@@ -3,6 +3,7 @@ using System;
 using FolkaAPI.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,34 +11,14 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace FolkaAPI.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250825101924_AddAppliedCouponCodeToOrder")]
+    partial class AddAppliedCouponCodeToOrder
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.8");
-
-            modelBuilder.Entity("FolkaAPI.Models.AppliedCoupon", b =>
-                {
-                    b.Property<string>("UserId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("AppliedDate")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("CouponId")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("Id")
-                        .HasColumnType("INTEGER");
-
-                    b.HasKey("UserId");
-
-                    b.HasIndex("CouponId");
-
-                    b.ToTable("AppliedCoupons");
-                });
 
             modelBuilder.Entity("FolkaAPI.Models.CartItem", b =>
                 {
@@ -390,25 +371,6 @@ namespace FolkaAPI.Migrations
                     b.HasIndex("ProductId");
 
                     b.ToTable("UserFavorites");
-                });
-
-            modelBuilder.Entity("FolkaAPI.Models.AppliedCoupon", b =>
-                {
-                    b.HasOne("FolkaAPI.Models.Coupon", "Coupon")
-                        .WithMany()
-                        .HasForeignKey("CouponId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("FolkaAPI.Models.User", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Coupon");
-
-                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("FolkaAPI.Models.CartItem", b =>

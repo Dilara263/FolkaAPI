@@ -8,6 +8,7 @@ using FolkaAPI.Models;
 using FolkaAPI.Dtos;
 using Microsoft.EntityFrameworkCore;
 using System.Globalization;
+using System;
 
 namespace FolkaAPI.Controllers
 {
@@ -27,13 +28,14 @@ namespace FolkaAPI.Controllers
         {
             return User.FindFirstValue(ClaimTypes.NameIdentifier);
         }
-        private async Task<CartResponseDto> GetEnrichedCartResponse(string userId)
+
+        private async Task<CartResponseDto> GetEnrichedCartResponse(string userId, string? appliedCouponCode = null)
         {
             var userCartItems = await _context.CartItems
                                             .Where(ci => ci.UserId == userId)
                                             .ToListAsync();
 
-            decimal totalPrice = 0;
+            decimal subtotalPrice = 0;
             var enrichedCartItems = new List<CartItem>();
 
             foreach (var item in userCartItems)
@@ -58,7 +60,7 @@ namespace FolkaAPI.Controllers
                         ProductPrice = productPrice,
                         ProductImage = product.Image
                     });
-                    totalPrice += productPrice * item.Quantity;
+                    subtotalPrice += productPrice * item.Quantity;
                 }
                 else
                 {
@@ -75,16 +77,51 @@ namespace FolkaAPI.Controllers
                 }
             }
 
+            decimal discountAmount = 0;
+            string? finalAppliedCouponCode = null;
+
+            string? couponCodeToApply = appliedCouponCode;
+            // if (string.IsNullOrEmpty(couponCodeToApply) && _appliedCoupons.TryGetValue(userId, out string? tempCouponCode))
+            // {
+            //     couponCodeToApply = tempCouponCode;
+            // }
+
+            if (!string.IsNullOrEmpty(couponCodeToApply))
+            {
+                var coupon = await _context.Coupons.FirstOrDefaultAsync(c => c.Id == couponCodeToApply);
+                var userOwnsCoupon = await _context.UserCoupons.AnyAsync(uc => uc.UserId == userId && uc.CouponId == couponCodeToApply && !uc.IsUsed);
+
+                if (coupon != null && coupon.IsActive && coupon.ExpiryDate > DateTime.UtcNow && userOwnsCoupon)
+                {
+                    if (subtotalPrice >= coupon.MinOrderAmount)
+                    {
+                        if (coupon.DiscountType == "Percentage")
+                        {
+                            discountAmount = subtotalPrice * coupon.DiscountValue;
+                        }
+                        else if (coupon.DiscountType == "Amount")
+                        {
+                            discountAmount = coupon.DiscountValue;
+                        }
+                        finalAppliedCouponCode = coupon.Id;
+                    }
+                    // else: Minimum sipariş tutarı karşılanmıyorsa indirim uygulanmaz
+                }
+                // else: Kupon geçersiz hale geldiyse indirim uygulanmaz
+            }
+
             return new CartResponseDto
             {
                 CartItems = enrichedCartItems,
-                TotalPrice = totalPrice
+                TotalPrice = subtotalPrice - discountAmount,
+                DiscountAmount = discountAmount,
+                AppliedCouponCode = finalAppliedCouponCode
             };
         }
 
 
         [HttpPost]
-        public async Task<IActionResult> CreateOrder()
+        public async Task<IActionResult> CreateOrder([FromBody] CreateOrderDto request) // CreateOrderDto alacak şekilde güncellendi
         {
             string? userId = GetUserId();
             if (string.IsNullOrEmpty(userId))
@@ -102,7 +139,7 @@ namespace FolkaAPI.Controllers
             }
 
             var orderItems = new List<OrderItem>();
-            decimal orderTotalPrice = 0;
+            decimal subtotalPrice = 0;
 
             foreach (var cartItem in userCartItems)
             {
@@ -133,20 +170,56 @@ namespace FolkaAPI.Controllers
                     ProductName = product.Name,
                     ProductImage = product.Image
                 });
-                orderTotalPrice += unitPrice * cartItem.Quantity;
+                subtotalPrice += unitPrice * cartItem.Quantity;
 
-                // Stoktan düşme (gerçek uygulamada transaction içinde olmalı)
                 product.Stock -= cartItem.Quantity;
                 _context.Products.Update(product);
             }
+
+            decimal discountAmount = 0;
+            string? finalAppliedCouponCode = null;
+
+            if (!string.IsNullOrEmpty(request.AppliedCouponCode))
+            {
+                var coupon = await _context.Coupons.FirstOrDefaultAsync(c => c.Id == request.AppliedCouponCode);
+                var userOwnsCoupon = await _context.UserCoupons.AnyAsync(uc => uc.UserId == userId && uc.CouponId == request.AppliedCouponCode && !uc.IsUsed);
+
+                if (coupon != null && coupon.IsActive && coupon.ExpiryDate > DateTime.UtcNow && userOwnsCoupon)
+                {
+                    if (subtotalPrice >= coupon.MinOrderAmount)
+                    {
+                        if (coupon.DiscountType == "Percentage")
+                        {
+                            discountAmount = subtotalPrice * coupon.DiscountValue;
+                        }
+                        else if (coupon.DiscountType == "Amount")
+                        {
+                            discountAmount = coupon.DiscountValue;
+                        }
+                        finalAppliedCouponCode = coupon.Id;
+
+                        var userCouponEntry = await _context.UserCoupons
+                                                            .FirstOrDefaultAsync(uc => uc.UserId == userId && uc.CouponId == request.AppliedCouponCode);
+                        if (userCouponEntry != null)
+                        {
+                            userCouponEntry.IsUsed = true;
+                            _context.UserCoupons.Update(userCouponEntry);
+                        }
+                    }
+                    // else: Minimum sipariş tutarı karşılanmıyorsa indirim uygulanmaz
+                }
+                // else: Kupon geçersizse indirim uygulanmaz
+            }
+
 
             var order = new Order
             {
                 UserId = userId,
                 OrderDate = DateTime.UtcNow,
-                TotalPrice = orderTotalPrice,
+                TotalPrice = subtotalPrice - discountAmount,
                 Status = "Pending",
-                OrderItems = orderItems
+                OrderItems = orderItems,
+                AppliedCouponCode = finalAppliedCouponCode
             };
 
             _context.Orders.Add(order);

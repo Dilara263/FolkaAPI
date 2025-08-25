@@ -3,11 +3,12 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
+using FolkaAPI.Data;
 using FolkaAPI.Models;
 using FolkaAPI.Dtos;
-using System.Globalization;
-using FolkaAPI.Data;
 using Microsoft.EntityFrameworkCore;
+using System.Globalization;
+using System;
 
 namespace FolkaAPI.Controllers
 {
@@ -34,7 +35,7 @@ namespace FolkaAPI.Controllers
                                             .Where(ci => ci.UserId == userId)
                                             .ToListAsync();
 
-            decimal totalPrice = 0;
+            decimal subtotalPrice = 0;
             var enrichedCartItems = new List<CartItem>();
 
             foreach (var item in userCartItems)
@@ -59,7 +60,7 @@ namespace FolkaAPI.Controllers
                         ProductPrice = productPrice,
                         ProductImage = product.Image
                     });
-                    totalPrice += productPrice * item.Quantity;
+                    subtotalPrice += productPrice * item.Quantity;
                 }
                 else
                 {
@@ -76,10 +77,49 @@ namespace FolkaAPI.Controllers
                 }
             }
 
+            decimal discountAmount = 0;
+            string? appliedCouponCode = null;
+
+            var appliedCouponEntry = await _context.AppliedCoupons.FirstOrDefaultAsync(ac => ac.UserId == userId);
+
+            if (appliedCouponEntry != null)
+            {
+                var coupon = await _context.Coupons.FirstOrDefaultAsync(c => c.Id == appliedCouponEntry.CouponId);
+                var userOwnsCoupon = await _context.UserCoupons.AnyAsync(uc => uc.UserId == userId && uc.CouponId == appliedCouponEntry.CouponId && !uc.IsUsed);
+
+                if (coupon != null && coupon.IsActive && coupon.ExpiryDate > DateTime.UtcNow && userOwnsCoupon)
+                {
+                    if (subtotalPrice >= coupon.MinOrderAmount)
+                    {
+                        if (coupon.DiscountType == "Percentage")
+                        {
+                            discountAmount = subtotalPrice * coupon.DiscountValue;
+                        }
+                        else if (coupon.DiscountType == "Amount")
+                        {
+                            discountAmount = coupon.DiscountValue;
+                        }
+                        appliedCouponCode = coupon.Id;
+                    }
+                    else
+                    {
+                        _context.AppliedCoupons.Remove(appliedCouponEntry);
+                        await _context.SaveChangesAsync();
+                    }
+                }
+                else
+                {
+                    _context.AppliedCoupons.Remove(appliedCouponEntry);
+                    await _context.SaveChangesAsync();
+                }
+            }
+
             return new CartResponseDto
             {
                 CartItems = enrichedCartItems,
-                TotalPrice = totalPrice
+                TotalPrice = subtotalPrice - discountAmount,
+                DiscountAmount = discountAmount,
+                AppliedCouponCode = appliedCouponCode
             };
         }
 
@@ -115,7 +155,7 @@ namespace FolkaAPI.Controllers
             }
 
             var existingCartItem = await _context.CartItems
-                                                .FirstOrDefaultAsync(ci => ci.UserId == userId && ci.ProductId == request.ProductId);
+                                                    .FirstOrDefaultAsync(ci => ci.UserId == userId && ci.ProductId == request.ProductId);
 
             int quantityToAdd = request.Quantity;
 
@@ -138,7 +178,6 @@ namespace FolkaAPI.Controllers
             }
 
             await _context.SaveChangesAsync();
-
             return Ok(await GetEnrichedCartResponse(userId));
         }
 
@@ -157,7 +196,7 @@ namespace FolkaAPI.Controllers
             }
 
             var existingCartItem = await _context.CartItems
-                                                .FirstOrDefaultAsync(ci => ci.UserId == userId && ci.ProductId == updateDto.ProductId);
+                                                    .FirstOrDefaultAsync(ci => ci.UserId == userId && ci.ProductId == updateDto.ProductId);
 
             if (existingCartItem == null)
             {
@@ -184,12 +223,11 @@ namespace FolkaAPI.Controllers
             }
 
             await _context.SaveChangesAsync();
-
             return Ok(await GetEnrichedCartResponse(userId));
         }
 
-        [HttpDelete("{productId}")]
-        public async Task<IActionResult> RemoveFromCart(string productId)
+        [HttpPost("apply-coupon")]
+        public async Task<IActionResult> ApplyCoupon([FromBody] ApplyCouponDto request)
         {
             string? userId = GetUserId();
             if (string.IsNullOrEmpty(userId))
@@ -197,37 +235,53 @@ namespace FolkaAPI.Controllers
                 return Unauthorized();
             }
 
-            var cartItemToRemove = await _context.CartItems
-                                                .FirstOrDefaultAsync(ci => ci.UserId == userId && ci.ProductId == productId);
-
-            if (cartItemToRemove == null)
+            if (request == null || string.IsNullOrEmpty(request.CouponCode))
             {
-                return NoContent();
+                return BadRequest(new { message = "Geçersiz kupon kodu." });
             }
 
-            _context.CartItems.Remove(cartItemToRemove);
+            var coupon = await _context.Coupons.FirstOrDefaultAsync(c => c.Id == request.CouponCode);
+            if (coupon == null || !coupon.IsActive || coupon.ExpiryDate <= DateTime.UtcNow)
+            {
+                var existingAppliedCoupon = await _context.AppliedCoupons.FirstOrDefaultAsync(ac => ac.UserId == userId);
+                if (existingAppliedCoupon != null)
+                {
+                    _context.AppliedCoupons.Remove(existingAppliedCoupon);
+                    await _context.SaveChangesAsync();
+                }
+                return BadRequest(new { message = "Geçersiz veya süresi dolmuş kupon kodu." });
+            }
+
+            var userOwnsCoupon = await _context.UserCoupons
+                                                .AnyAsync(uc => uc.UserId == userId && uc.CouponId == request.CouponCode && !uc.IsUsed);
+
+            if (!userOwnsCoupon)
+            {
+                var existingAppliedCoupon = await _context.AppliedCoupons.FirstOrDefaultAsync(ac => ac.UserId == userId);
+                if (existingAppliedCoupon != null)
+                {
+                    _context.AppliedCoupons.Remove(existingAppliedCoupon);
+                    await _context.SaveChangesAsync();
+                }
+                return BadRequest(new { message = "Bu kupona sahip değilsiniz veya zaten kullanılmış." });
+            }
+
+            var appliedCouponEntry = await _context.AppliedCoupons.FirstOrDefaultAsync(ac => ac.UserId == userId);
+
+            if (appliedCouponEntry == null)
+            {
+                _context.AppliedCoupons.Add(new AppliedCoupon { UserId = userId, CouponId = request.CouponCode, AppliedDate = DateTime.UtcNow });
+            }
+            else
+            {
+                appliedCouponEntry.CouponId = request.CouponCode;
+                appliedCouponEntry.AppliedDate = DateTime.UtcNow;
+                _context.AppliedCoupons.Update(appliedCouponEntry);
+            }
             await _context.SaveChangesAsync();
 
             return Ok(await GetEnrichedCartResponse(userId));
-        }
 
-        [HttpDelete("clear")]
-        public async Task<IActionResult> ClearCart()
-        {
-            string? userId = GetUserId();
-            if (string.IsNullOrEmpty(userId))
-            {
-                return Unauthorized();
-            }
-
-            var userCartItems = await _context.CartItems
-                                            .Where(ci => ci.UserId == userId)
-                                            .ToListAsync();
-
-            _context.CartItems.RemoveRange(userCartItems);
-            await _context.SaveChangesAsync();
-
-            return Ok(await GetEnrichedCartResponse(userId));
         }
     }
 }

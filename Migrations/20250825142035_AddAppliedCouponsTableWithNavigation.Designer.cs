@@ -11,14 +11,36 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace FolkaAPI.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20250820104830_FixOrderItemRelationship")]
-    partial class FixOrderItemRelationship
+    [Migration("20250825142035_AddAppliedCouponsTableWithNavigation")]
+    partial class AddAppliedCouponsTableWithNavigation
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.8");
+
+            modelBuilder.Entity("FolkaAPI.Models.AppliedCoupon", b =>
+                {
+                    b.Property<string>("UserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("AppliedDate")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CouponId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Id")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("UserId");
+
+                    b.HasIndex("CouponId");
+
+                    b.ToTable("AppliedCoupons");
+                });
 
             modelBuilder.Entity("FolkaAPI.Models.CartItem", b =>
                 {
@@ -53,11 +75,76 @@ namespace FolkaAPI.Migrations
                     b.ToTable("CartItems");
                 });
 
+            modelBuilder.Entity("FolkaAPI.Models.Coupon", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DiscountType")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("DiscountValue")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("ExpiryDate")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("MinOrderAmount")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Coupons");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = "IND10",
+                            Description = "%10 İndirim Kuponu",
+                            DiscountType = "Percentage",
+                            DiscountValue = 0.10m,
+                            ExpiryDate = new DateTime(2026, 8, 20, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IsActive = true,
+                            MinOrderAmount = 50
+                        },
+                        new
+                        {
+                            Id = "FREEKARGO",
+                            Description = "Ücretsiz Kargo Kuponu",
+                            DiscountType = "Amount",
+                            DiscountValue = 15m,
+                            ExpiryDate = new DateTime(2027, 2, 20, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IsActive = true,
+                            MinOrderAmount = 100
+                        },
+                        new
+                        {
+                            Id = "YAZINDIRIMI",
+                            Description = "Yaz İndirimi %20",
+                            DiscountType = "Percentage",
+                            DiscountValue = 0.20m,
+                            ExpiryDate = new DateTime(2025, 9, 20, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IsActive = true,
+                            MinOrderAmount = 75
+                        });
+                });
+
             modelBuilder.Entity("FolkaAPI.Models.Order", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
+
+                    b.Property<string>("AppliedCouponCode")
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("OrderDate")
                         .HasColumnType("TEXT");
@@ -220,19 +307,76 @@ namespace FolkaAPI.Migrations
                     b.HasData(
                         new
                         {
-                            Id = "1",
-                            Address = "Folka Sanat Sokağı, No:12",
-                            Email = "dilara@email.com",
-                            Name = "Dilara",
-                            PasswordHash = "$2a$11$6czEq3jqxd33yQeZKWSGteUzDigkSa4zEqQiyndKNfQkhK7jEp6yK,",
-                            PhoneNumber = "+90 555 123 4567"
+                            Id = "04f97db4-3c37-4e07-a46a-1630c9c004b7",
+                            Address = "Yeni Mah",
+                            Email = "dilaraemail",
+                            Name = "Dilara Dereli",
+                            PasswordHash = "$2a$11$E3Ytpo3XyvjWEz.DOg.cmU1jYv2cv6JyZUTtUPWITG",
+                            PhoneNumber = "5419187223"
                         },
                         new
                         {
-                            Id = "2",
-                            Email = "test@user.com",
-                            Name = "Test User",
-                            PasswordHash = "$2a$11$Up..XmfOQrriidmoh/lHNuIp7fxpuKDlU8zboh1ecD9.SudkPhfMC"
+                            Id = "9befa110-b89c-4b6e-a1be-f5a17b7efddd",
+                            Address = "sixsos",
+                            Email = "emoemail",
+                            Name = "emo",
+                            PasswordHash = "$2a$11$6771O0X6P0BxBV0tV0UukKzLbqnMT48O0Xhng4q76WUnMBDJGO",
+                            PhoneNumber = "16165"
+                        });
+                });
+
+            modelBuilder.Entity("FolkaAPI.Models.UserCoupon", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("AcquiredDate")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CouponId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsUsed")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CouponId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("UserCoupons");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            AcquiredDate = new DateTime(2025, 8, 20, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CouponId = "IND10",
+                            IsUsed = false,
+                            UserId = "04f97db4-3c37-4e07-a46a-1630c9c004b7"
+                        },
+                        new
+                        {
+                            Id = 2,
+                            AcquiredDate = new DateTime(2025, 8, 20, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CouponId = "YAZINDIRIMI",
+                            IsUsed = false,
+                            UserId = "04f97db4-3c37-4e07-a46a-1630c9c004b7"
+                        },
+                        new
+                        {
+                            Id = 3,
+                            AcquiredDate = new DateTime(2025, 8, 20, 0, 0, 0, 0, DateTimeKind.Utc),
+                            CouponId = "FREEKARGO",
+                            IsUsed = false,
+                            UserId = "9befa110-b89c-4b6e-a1be-f5a17b7efddd"
                         });
                 });
 
@@ -249,6 +393,25 @@ namespace FolkaAPI.Migrations
                     b.HasIndex("ProductId");
 
                     b.ToTable("UserFavorites");
+                });
+
+            modelBuilder.Entity("FolkaAPI.Models.AppliedCoupon", b =>
+                {
+                    b.HasOne("FolkaAPI.Models.Coupon", "Coupon")
+                        .WithMany()
+                        .HasForeignKey("CouponId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("FolkaAPI.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Coupon");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("FolkaAPI.Models.CartItem", b =>
@@ -284,6 +447,25 @@ namespace FolkaAPI.Migrations
                         .IsRequired();
 
                     b.Navigation("Order");
+                });
+
+            modelBuilder.Entity("FolkaAPI.Models.UserCoupon", b =>
+                {
+                    b.HasOne("FolkaAPI.Models.Coupon", "Coupon")
+                        .WithMany()
+                        .HasForeignKey("CouponId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("FolkaAPI.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Coupon");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("FolkaAPI.Models.UserFavorite", b =>

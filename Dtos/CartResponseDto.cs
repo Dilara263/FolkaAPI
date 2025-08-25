@@ -7,5 +7,7 @@ namespace FolkaAPI.Dtos
     {
         public List<CartItem> CartItems { get; set; } = new List<CartItem>();
         public decimal TotalPrice { get; set; }
+        public decimal DiscountAmount { get; set; } = 0;
+        public string? AppliedCouponCode { get; set; }
     }
 }
